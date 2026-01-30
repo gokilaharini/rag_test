@@ -1,0 +1,31 @@
+# Core API framework
+fastapi
+uvicorn[standard]
+
+# LangChain core
+langchain
+langchain-community
+langchain-core
+
+# Google Gemini (LLM + Embeddings)
+langchain-google-genai
+google-generativeai
+
+# MongoDB + Vector Search
+pymongo
+langchain-mongodb
+
+
+# Document loading & text processing
+pypdf
+pdfplumber
+
+# Text splitting & utilities
+tiktoken
+
+# Environment & config
+python-dotenv
+
+# Optional but recommended
+requests
+python-multipart
