@@ -10,7 +10,7 @@ from langchain.chat_models import init_chat_model
 from langchain.tools import tool
 
 
-
+from fastapi.middleware.cors import CORSMiddleware
 from langchain.agents import create_agent
 from langchain.agents.middleware import dynamic_prompt, ModelRequest
 
@@ -19,6 +19,13 @@ from langchain.agents.middleware import dynamic_prompt, ModelRequest
 
 
 app = FastAPI(title="AI RAG Service")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,  # REQUIRED if using "*"
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health")
 def health():
