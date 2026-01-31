@@ -14,7 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain.agents import create_agent
 from langchain.agents.middleware import dynamic_prompt, ModelRequest
 
-
+import os
+import uuid 
 
 
 
@@ -136,7 +137,7 @@ prompt = ChatPromptTemplate.from_template(template)
 
 from langchain.chat_models import init_chat_model
 
-model = init_chat_model("google_genai:gemini-2.5-flash-lite")
+model = init_chat_model("google_genai:gemini-2.0-flash")
 
 
 from langchain_core.runnables import RunnablePassthrough
@@ -166,3 +167,102 @@ async def quick_response(req: ChatRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+from pypdf import PdfReader
+
+# ---- new -----
+from fastapi import UploadFile, File, Form, HTTPException
+from pydantic import BaseModel
+import uuid, shutil, os, json
+
+@app.post("/check-syllabus/pdf")
+async def check_syllabus_from_pdf(
+    file: UploadFile = File(...),
+    syllabus: str = Form(...)
+):
+    temp_path = None
+    try:
+        if not syllabus.strip():
+            raise HTTPException(status_code=400, detail="Syllabus content is required")
+
+        # 1. Save PDF temporarily
+        temp_id = str(uuid.uuid4())
+        temp_path = f"/tmp/{temp_id}_{file.filename}"
+
+        with open(temp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # 2. Convert PDF → text
+        reader = PdfReader(temp_path)
+        pdf_text = ""
+
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                pdf_text += text + "\n\n"
+
+        if not pdf_text.strip():
+            raise HTTPException(status_code=400, detail="No readable text found in PDF")
+
+        # 3. Prompt
+        prompt = f"""
+You are an academic content analyzer.
+
+TASK:
+1. Extract the main topics and subtopics from the PDF content.
+2. Compare them with the syllabus provided.
+3. Return:
+   - Topics fully covered
+   - Topics partially covered
+   - Topics missing
+   - Extra topics present in the PDF but not in the syllabus
+
+PDF CONTENT:
+{pdf_text}
+
+SYLLABUS:
+{syllabus}
+IMPORTANT:
+- Return ONLY valid JSON
+- Do NOT include explanations
+- Do NOT include markdown
+- Do NOT include backticks
+- Do NOT include any text outside JSON
+
+
+OUTPUT FORMAT (STRICT JSON ONLY), use the below structure as template:
+{{
+  "covered_topics": [],
+  "partially_covered_topics": [],
+  "missing_topics": [],
+  "extra_topics_in_pdf": [],
+  "overall_coverage_percentage": 0
+}}
+"""
+
+        # 4. Call LLM
+        response = await model.ainvoke(prompt)
+
+        # raw_text = response.content if hasattr(response, "content") else str(response)
+
+# 5. Get raw LLM output
+        raw_text = (
+            response.content
+            if hasattr(response, "content")
+            else str(response)
+        )
+
+        # 6. Return output directly
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "analysis": raw_text
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
